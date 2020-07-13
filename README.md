@@ -2,66 +2,15 @@
 Contains vignettes and functions for creating River and Infrastructure Connectivity Network (RICON) data base.  To access the latest version of the dataset for the Colorado River Basin, please visit 
 https://figshare.com/articles/River_and_Infrastructure_Connectivity_Network_RICON_/11849157  
 
-
 River and Infrastructure Connectivity Network (RICON) – shows the dependency between streamgages and reservoirs as a concise edge list for the Colorado River Basin (CRB). The RICON dataset provides (1) a complete list of edges for the unidirectional network connecting streamgages, reservoirs and NHDPlusflowline features for CRB and (2) attributes of all nodes (reservoirs and streamgages) including their geospatial locations, unique identifiers, immediate upstream and downstream nodes, etc. The RICON data archive available at figshare contains the dataset tables in comma-separated values (CSV) format. Input files are 'sites_df.csv', 'nid_df.csv' and 'NHD_data.RData'. Output file is 'Edge_List.csv' 
 
 
 Using the following steps one can reproduce the River and Infrastructure Connectivity Network (RICON) dataset for Colorado River Basin :  
-```{r setup, include=FALSE, warning=FALSE}
-knitr::opts_chunk$set(echo = TRUE,
-    collapse = TRUE,
-    comment = "#>",
-    message = FALSE,
-    warning = FALSE,
-    cache = TRUE,
-    tidy = FALSE,
-    fig.width = 7,
-    fig.height = 7,
-	  fit.pagh = "images",
-    out.width = "65%")
 
-library(dataRetrieval) # for input data prepation only 
-library(dams) # for input data prepation only 
-library(tidyverse)
-library(tidyr)
-library(dplyr)
-library(purrr)
-library(stringr)
-library(stringdist)
-library(roxygen2)
-library(rmarkdown)
-library(readr)
-library(sf)
-library(sfheaders)
-library(rgdal)
-library(rgeos)
-library(ggplot2)
-library(rgdal)
-library(sp)
-library(maptools)
-library(foreign)
-library(data.table)
-library(reshape2)
-library(tictoc)
-
-# Path to downloaded data
-ricon_data_path <- "./11849157/" 
-
-file.sources <- list.files("../scripts/",pattern = ".R",no.. = TRUE, full.names = TRUE)
-source.functions <- sapply(file.sources, source)
-
-# # Note : When running the code, make sure you keep "eval=TRUE" at each code chunk! 
-
-```
 
 ## Download RICON data : 
 Once you have downloaded the  [RICON](https://figshare.com/articles/dataset/River_and_Infrastructure_Connectivity_Network_RICON_/11849157) data in your local directory, you have the following files :  
-
-* Input files 
-      + nid_df.csv
-      + sites_df.csv
-      + NHD_data.RData 
-* Edge_list.csv 
+1. nid_df.csv, 2. sites_df.csv, 3. NHD_data.RData and 4. Edge_list.csv 
 
 The input data set already contains all the information neccessary to create the edge list of dams and streamgages for Colorado River Basin. Please update "ricon_data_path" argument before running each code chunk in the demo file. Data files must be downloaded from figshare and saved in a local directory. 
 
@@ -81,15 +30,6 @@ The point data must have these attributes : (i) "IDS", (ii) "NAME", (iii) "LONGI
 
 NHD_data.RData contains NHDPlusV2 data used in the analysis, combined for water resources regions 14 and 15. 
 
-Before proceeding with network creation, let's look at the data. 
-
-```{r check data, echo=TRUE, eval=TRUE}
-
-head(nid_df) 
-
-head(sites_df)  
-```
-
 ## Create network for Colorado River Basin 
 
 Because of the recursive nature of network traversal,  it may take long time to run this part, depending on the size of input data. 
@@ -105,24 +45,22 @@ result <- create_network(points = list(dams = nid_df,sites = sites_df),
                           Flowline.df = NULL)
 
 toc()  # 
-
-names(result) 
 ``` 
 
 The "result_network" is a list containing the following elements:  
 
 1.  "edge_list" contains the columns - 
-    + FROM_NODE 
-    + TO_NODE 
-    + EDGE_LENGTHKM 
-    + FROM_NODETYPE
-    + TO_NODETYPE
-    + FROM_COMID 
-    + TO_COMID 
-    + FROM_LEVELPATHI
-    + TO_LEVELPATHI
-    + FROM_NODE_NAME 
-    + TO_NODE_NAME 
+    - FROM_NODE 
+    - TO_NODE 
+    - EDGE_LENGTHKM 
+    - FROM_NODETYPE
+    - TO_NODETYPE
+    - FROM_COMID 
+    - TO_COMID 
+    - FROM_LEVELPATHI
+    - TO_LEVELPATHI
+    - FROM_NODE_NAME 
+    - TO_NODE_NAME 
 2.  "connectivity" 
 3.  "combined_Points" 
 4.  "joined_flowline"
@@ -147,7 +85,6 @@ dist_hoover_glencanyon <- find_distance(edges = edge_list_ricon,
                                         point1 = as.character(hoover), # TO_NODE
                                         point2 = as.character(glencanyon), # FROM_NODE
                                         direction = "downstream") 
-
 
 # Distance between points (Kilometers): 
 sum(unlist(dist_hoover_glencanyon)) 
