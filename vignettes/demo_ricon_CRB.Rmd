@@ -46,8 +46,11 @@ library(tictoc)
 
 # Path to downloaded data
 ricon_data_path <- "./11849157/" 
+# This folder on github does not contain NHD data. Please go to figshare to download complete RICON data set for Colorado River Basin BEFORE running 
+# this file. 
+# 
 
-file.sources <- list.files("../scripts/",pattern = ".R",no.. = TRUE, full.names = TRUE)
+file.sources <- list.files("../Scripts/",pattern = ".R",no.. = TRUE, full.names = TRUE)
 source.functions <- sapply(file.sources, source)
 
 # # Note : When running the code, make sure you keep "eval=TRUE" at each code chunk! 
@@ -95,7 +98,7 @@ head(sites_df)
 Because of the recursive nature of network traversal,  it may take long time to run this part, depending on the size of input data. 
 
 ```{r create network, echo=TRUE, eval=FALSE, include=TRUE}
-# this takes ~ 20 min or more depending on the machine. 
+# this takes ~ 20 min or more depending on the machine. Change eval = TRUE for running. 
 tic()
  
 result <- create_network(points = list(dams = nid_df,sites = sites_df), 
