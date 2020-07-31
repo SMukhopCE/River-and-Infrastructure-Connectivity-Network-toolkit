@@ -1,0 +1,496 @@
+---
+title: "Input data preparation for developing RICON dataset for the Colorado River Basin"
+author: "Sudarshana Mukhopadhyay"
+output: 
+  html_document:
+    toc: true 
+    toc_depth: 3
+---
+Using the following steps one can reproduce the input data sets that can be used to create River and Infrastructure Connectivity Network (RICON) dataset for Colorado River Basin (CRB). For reproducing the latest version of RICON data for CRB, please see "demo_ricon_CRB.Rmd" file. Here a step-by-step workflow is presented to create the input data for a recursive network search for identifying connectivity network of infrastructure facilities. 
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+    collapse = TRUE,
+    comment = "#>",
+    message = FALSE,
+    warning = FALSE,
+    cache = TRUE,
+    tidy = FALSE,
+    fig.width = 7,
+    fig.height = 7,
+	  fit.pagh = "images",
+    out.width = "65%")
+
+library(dataRetrieval) # for input data prepation only 
+library(dams) # for input data prepation only 
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(stringr)
+library(stringdist)
+library(roxygen2)
+library(rmarkdown)
+library(readr)
+library(sf)
+library(sfheaders)
+library(rgdal)
+library(rgeos)
+library(ggplot2)
+library(rgdal)
+library(sp)
+library(maptools)
+library(foreign)
+library(data.table)
+library(reshape2)
+library(tictoc)
+
+data.sources <- "." # Update this for your local directory 
+
+file.sources <- list.files("../scripts/",pattern = ".R",no.. = TRUE, full.names = TRUE)
+source.functions <- sapply(file.sources, source)
+
+# keep everything in same projection 
+crs_all <- "+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0" 
+
+# # Note : When running the code, make sure you keep "eval=TRUE" at each code chunk! 
+
+```
+
+# Data preparation
+For RICON dataset for CRB, there are three input datasets : 
+  1. NID reservoir spatial points, 
+  2. NWIS streamgages spatial points and 
+  3. NHDPlusV2 datasets (vector attribute tables and spatial polylines). 
+
+Following the details presented here, one can produce RICON with different kinds of spatial 
+point information and over different watersheds. 
+ 
+## Data download 
+Downloading spatial datasets may take long time depending on the domain size.
+
+### Input 1: Streamgages for the watershed region 
+In the present work, we are interested in creating the dataset for the CRB which constitutes 
+of watershed regions (Hydrologic Unit Code, HUC) 14 and 15. Using _dataRetrieval_ package, 
+streamgage datasets for upper and lower Colorado Basins (HUC 14 and 15) are obtained. 
+
+```{r gages, echo=TRUE, eval=FALSE}
+# 'build_sitelist' function takes an input argumen named 'CAT.ID' or catchment ID for which  streamgage site specific attributes are obtained using 'DataRetrieval' package. This wrapper function is particularly suitable for gathering information on streamgages where daily data is available in cubic feet per second. 
+
+# Depending on specific requirements, readers are encouraged to u
+
+gages_14 <- build_sitelist("14") # Upper Colorado
+gages_15 <- build_sitelist("15") # Lower Colorado
+
+gages_CO <- dplyr::bind_rows(gages_14,gages_15) 
+# this contains 1888 gages.
+
+# check quality of streamflow data 
+# this step is carried out as this data set is used by Ruhi et. al (2019)
+
+# Ruhi, A., Hwang, J., Devineni, N., Mukhopadhyay, S., Kumar, H., Comte, L., ... & Arumugam, S. How does flow alteration propagate across a large, highly-regulated basin? Dam attributes, network context, and implications for biodiversity. In AGU Fall Meeting 2019. AGU. (2019, December).
+
+available_DailyData <- check_streamflow(gages_CO$site_no) 
+
+qaqc_DailyData <- available_DailyData %>% 
+                              mutate(missingFlag = ifelse(count_nu < date_diff,1,0),
+                                     PercMissing = ifelse(count_nu < date_diff,100 - 
+                                                            100*(count_nu/date_diff),0),
+                                     yr_frst_rec = year(begin_date),
+                                     yr_last_rec = year(end_date)) %>% 
+                                group_by(site_no) %>% 
+                                summarise(TotPercMissing = sum(PercMissing),
+                                        missingFlag = first(missingFlag),
+                                        yr_frst_rec = first(yr_frst_rec), 
+                                        yr_last_rec = first(yr_last_rec),
+                                        count_nu = sum(count_nu))
+
+
+gages_CO <- left_join(gages_CO, qaqc_DailyData, by = "site_no")
+
+```
+
+### Input 2: Reservoir dataset from National Inventory of Dams (NID)
+This dataset is accessed using _dams_ package. 
+```{r dams, echo=TRUE, eval=FALSE}
+nid_all <- dams::nid_cleaned # all reservoirs from NID 
+#
+# You can specify a column that has all unique values. Or just create one
+if (dim(nid_all)[1] == length(unique(nid_all$NID_ID))) {
+  nid_all <- nid_all %>% 
+    dplyr::mutate(ID = NID_ID) %>% 
+    dplyr::select(ID,everything())
+} else {
+  print("Creating an extra column `IDS` for unique IDs")
+  nid_all <- nid_all %>% 
+    dplyr::mutate(IDS = 1:dim(nid_all)[1]) %>% 
+    dplyr::select(IDS,everything()) 
+}
+```
+### Input 3: Flowlines data from NHDPlusV2
+
+```{r nhd, echo=TRUE, eval=FALSE }
+# Note: Data can be downloaded directly from
+# "ftp://ftp.horizon-systems.com/NHDplus/NHDPlusV21/Data/" 
+
+library(downloader)
+# install.packages("devtools")
+devtools::install_github("jimhester/archive")
+library(archive)
+library(RCurl) 
+
+# can take up some time. Update out.dir if needed  
+  filepaths_CO <- get_data(dd = "CO",out.dir = data.sources)
+ 
+# get a list of neccessary vector attributes 
+  NHD_14 <- readNHDdata(filepaths_CO[[1]])
+  NHD_15 <- readNHDdata(filepaths_CO[[2]])
+
+# combine data to keep flowlines with "known" flows ONLY : Enabled is TRUE and
+# FLOWDIR "with digitized" are used 
+
+  NHDFlowline <- rbind(NHD_14$NHDFlowline, NHD_15$NHDFlowline) %>%
+                 dplyr::subset((ENABLED %in% "True") & (FLOWDIR %in% "With Digitized"))
+  
+  PlusFlowlineVAA <- rbind(NHD_14$PlusFlowlineVAA, NHD_15$PlusFlowlineVAA)
+  
+  PlusFlow <- rbind(NHD_14$PlusFlow, NHD_15$PlusFlow)
+
+ NHDFlow.data <- dplur::full_join(NHDFlowline@data,PlusFlowlineVAA,by="ComID") %>% 
+                 dplyr::select(-ends_with(".y")) %>% 
+                 dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) 
+
+ # # Note: This is uploaded on figshare as 'NHD_data.RData' 
+ save(NHD_14,NHD_15,NHDFlow.data,NHDFlowline,PlusFlow,PlusFlowAR,PlusFlowlineVAA,
+      file=paste0(data.sources,'/NHD_data.RData'))  
+
+  
+ nhdflowline_sf <- st_as_sf(NHDFlowline) %>% st_transform(crs = crs_all)
+  
+ 
+```
+
+### Create subset of datasets for CRB
+Watershed boundary data for CRB is downloaded along with flowlines from NHDPlusV2 dataset.
+```{r subset, echo=TRUE, eval=FALSE}
+# get WBD shapefiles : 
+HUC_upper_CO <- sf::read_sf( paste0(filepaths_CO[[1]],
+                                    'WBDSnapshot/WBD'),'WBD_Subwatershed') %>% 
+                sf::st_transform(crs_all) %>% 
+                dplyr::mutate(HUC_2 = "14")
+
+HUC_lower_CO <- sf::read_sf( paste0(filepaths_CO[[2]], 
+                                    'WBDSnapshot/WBD'),'WBD_Subwatershed') %>% 
+                  sf::st_transform(crs_all)%>% 
+                  dplyr::mutate(HUC_2 = "15")
+
+basin_CO_wbd <- rbind(HUC_upper_CO,HUC_lower_CO)
+# Dissolved HU1415 WBD 
+basin_CO <- rbind(HUC_upper_CO,HUC_lower_CO) %>% group_by(HUC_2) %>% summarize()
+
+# Spatial point data 
+gages_sf <- sf::st_as_sf(x = gages_CO, 
+                         coords = c("Longitude","Latitude"),
+                         crs = crs_all)
+
+
+nid_sf <- nid_all %>% drop_na(Longitude,Latitude)  %>% 
+  sf::st_as_sf(
+    coords = c("Longitude","Latitude"),
+    crs = crs_all)
+
+# Keep data for CRB only 
+sites_CO <- st_intersection(gages_sf, basin_CO_wbd)
+dams_CO <- st_intersection(nid_sf, basin_CO_wbd) 
+
+```
+
+## Snap points to nearest flowline 
+
+### Identify nearest NHDFlowline 
+Snapping spatial point data to the nearest NHDFlowlines requires accurate identification of the nearest NHDFlowline feature for a given spatial point (streamgage or reservoir). We used a fuzzy string matching criteria along with minimum distance to identify the nearest NHDFlowline for a point. This is done by looking for river reaches with a _buffer_ distance from a given point location. Choice of _buffer_ distance can influence the outcome of this analysis. Mukhopadhyay et al. (2020) provides a detailed explanation of this method. Once we identify a number of river reaches with a buffer distance from a point, we compare those river names with the names of the points - to decide on the nearest river reach to the point. The 'ComID' of this nearest river reach or flowline - a unique identifier of all river reaches in NHDPlusV2 data - then becomes an attribute to the point data. 
+
+```{r funs, echo=FALSE, eval=TRUE}
+# some small funcitons 
+count.warnings <- function(x){ 
+  x <- as.data.frame(x)   
+  x1 <- x %>% dplyr::filter(VFLAG == 2 & WARN.FLAG == 0) %>% dplyr::count()
+  x2 <- x %>% dplyr::filter(VFLAG == 2 & WARN.FLAG == 1) %>% dplyr::count()
+  x3 <- x %>% dplyr::filter(VFLAG != 2 & WARN.FLAG == 1) %>% dplyr::count()  
+  x4 <- x %>% dplyr::filter((LEVELPATHI == FLLEVELPATHI) & WARN.FLAG == 1) %>% dplyr::count() 
+  return(c(x1,x2,x3,x4))
+}
+
+compare.levelpathids <- function(x, line.data = nhdflowline_sf){
+  
+  x <- keep.unique.cols(x)
+  
+  x <- x %>% dplyr::rename_all(stringr::str_to_upper)
+  
+ 
+  
+  line.data <- line.data %>% 
+               sf::st_drop_geometry() %>%  
+               dplyr::rename_all(stringr::str_to_upper)  %>% 
+               dplyr:: mutate(FLCOMID = COMID, FLLEVELPATHI = LEVELPATHI) %>%  
+               dplyr::select(FLCOMID, FLLEVELPATHI)  
+               
+  x <- x %>% left_join(line.data, by = 'FLCOMID')
+  
+  return(x)
+}
+
+```
+
+```{r nrst_line sites, echo=TRUE, eval=FALSE}
+# several buffer distances are tried from 50 meter to 10 km. 
+# gage locations from national NHD database are used as a benchmark to decide on a 
+# suitable buffer distance 
+#----- Benchmark ----------
+# # check gageLoc from NHD National data # this can be downloaded from 
+# # ftp://ftp.horizon-systems.com/NHDplus/NHDPlusV21/Data/NationalData/ 
+GageLocNational <- sf::st_read(paste0(data.sources,'/NationalData/NHDPlusV21_NationalData_GageLoc_05/NHDPlusNationalData/GageLoc.shp'))
+
+GageLoc_CO <- st_intersection(st_zm(GageLocNational), basin_CO)
+
+GageLoc_CO_v1 <- GageLoc_CO %>% select(-COMID) %>% 
+              mutate(site_no = as.character(SOURCE_FEA)) %>% 
+              st_join(sites_CO,by="site_no") %>% 
+  dplyr::select(-ends_with(".y")) %>% 
+  dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x")))
+
+length(unique(GageLoc_CO_v1$SOURCE_FEA)) # 2005 sites 
+
+
+gageLoc_missing_flowlines <- st_drop_geometry(GageLoc_CO_v1) %>% mutate(ComID = FLComID) %>% 
+                             anti_join(nhdflowline_sf, by = 'ComID') %>%  
+                              dplyr::select(-ends_with(".y")) %>% 
+                              dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x")))
+
+sites_to_remove <- sites_CO %>% filter(site_no %in% gageLoc_missing_flowlines$SOURCE_FEA) # 114 sites 
+
+
+sites_v1 <- sites_CO %>% filter(!site_no %in% sites_to_remove$SITE_NO)
+
+# ---- try different buffer distance -------
+
+test_sites_1km <- nearest_NHDflowline(pts. = sites_v1 %>% 
+                                      dplyr::mutate(info = station_nm,IDS = site_no ),
+                                      lines. = nhdflowline_sf,
+                                      tol = 1000)
+
+test_sites_10km <- nearest_NHDflowline(pts. = sites_v1 %>% 
+                                         dplyr::mutate(info = station_nm,IDS = site_no ),
+                                       lines. = nhdflowline_sf,
+                                       tol = 10000)
+
+test_sites_500m <- nearest_NHDflowline(pts. = sites_v1 %>% dplyr::mutate(info = station_nm, 
+                                                                         IDS = site_no ),
+                                       lines. = nhdflowline_sf,
+                                       tol = 500)
+test_sites_200m <- nearest_NHDflowline(pts. = sites_v1 %>% dplyr::mutate(info = station_nm, 
+                                                                         IDS = site_no ),
+                                       lines. = nhdflowline_sf,
+                                       tol = 200)
+test_sites_100m <- nearest_NHDflowline(pts. = sites_v1 %>% dplyr::mutate(info = station_nm, 
+                                                                         IDS = site_no ),
+                                       lines. = nhdflowline_sf,
+                                       tol = 100)
+# compare sites ----------------------------
+GageLoc_CO_v1 <- GageLoc_CO_v1 %>% dplyr::rename_all(stringr::str_to_upper)
+# 100 meter 
+compare_sites_100m <- test_sites_100m$pts.linked %>% 
+  left_join(GageLoc_CO_v1,by = "SITE_NO") %>% 
+  dplyr::select(-ends_with(".y")) %>% 
+  dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>%  
+  mutate(WARN.FLAG = ifelse(FLComID == COMID,0,1))
+
+compare_sites_100m <- compare.levelpathids(compare_sites_100m)
+
+# 200 meter 
+compare_sites_200m <- test_sites_200m$pts.linked %>% 
+  left_join(GageLoc_CO_v1,by = "SITE_NO") %>% 
+  dplyr::select(-ends_with(".y")) %>% 
+  dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>%  
+  mutate(WARN.FLAG = ifelse(FLComID == COMID,0,1))
+
+compare_sites_200m <- compare.levelpathids(compare_sites_200m)
+
+# 500 m 
+compare_sites_500m <- test_sites_500m$pts.linked %>% 
+  left_join(GageLoc_CO_v1,by = "SITE_NO") %>% 
+  dplyr::select(-ends_with(".y")) %>% 
+  dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>%  
+  mutate(WARN.FLAG = ifelse(FLComID == COMID,0,1))
+
+compare_sites_500m <- compare.levelpathids(compare_sites_500m)
+
+# 1 km 
+compare_sites_1km <- test_sites_1km$pts.linked %>% 
+  left_join(GageLoc_CO_v1,by = "SITE_NO") %>% 
+  dplyr::select(-ends_with(".y")) %>% 
+  dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>%  
+  mutate(WARN.FLAG = ifelse(FLCOMID == COMID,0,1)) 
+
+compare_sites_1km <- compare.levelpathids(compare_sites_1km)
+
+# 10 km 
+compare_sites_10km <- test_sites_10km$pts.linked %>% 
+  left_join(GageLoc_CO_v1,by = "SITE_NO") %>% 
+  dplyr::select(-ends_with(".y")) %>% 
+  dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>%  
+  mutate(WARN.FLAG = ifelse(FLComID == COMID,0,1))
+
+compare_sites_10km <- compare.levelpathids(compare_sites_10km)
+
+#--------classify misses/hits -------------- 
+# Num of warning flags and vflags 
+num_points_linked <- num_points_linked %>% mutate(N.VF2WF0 = NA, 
+                                                  N.VF2WF1 = NA, 
+                                                  N.VN2WF1 = NA,
+                                                  N.LV0WF1 = NA)
+num_points_linked[1,c('N.VF2WF0', 'N.VF2WF1','N.VN2WF1','N.LV0WF1')] <- count.warnings(compare_sites_100m) 
+num_points_linked[2,c('N.VF2WF0', 'N.VF2WF1','N.VN2WF1','N.LV0WF1')] <- count.warnings(compare_sites_200m)       
+num_points_linked[3,c('N.VF2WF0', 'N.VF2WF1','N.VN2WF1','N.LV0WF1')] <- count.warnings(compare_sites_500m)       
+num_points_linked[4,c('N.VF2WF0', 'N.VF2WF1','N.VN2WF1','N.LV0WF1')] <- count.warnings(compare_sites_1km)       
+num_points_linked[5,c('N.VF2WF0', 'N.VF2WF1','N.VN2WF1','N.LV0WF1')] <- count.warnings(compare_sites_10km)  
+# Final sites with 1km buffer 
+sites_CO_selected <- compare_sites_1km %>% mutate(NEAREST_LINE_ID = FLCOMID) %>% 
+                     select(SITE_NO, IDS, STATION_NM, NEAREST_LINE_ID, GEOMETRY ) %>% 
+                     mutate(COMID = NEAREST_LINE_ID)     
+
+```
+After comparing the number of visual warning flags across different buffer distances, a buffer distance of 1 km is used for further analysis. 
+```{r nrst_line dams, echo=TRUE, eval=FALSE}
+# Buffer distance 1 km 
+dams_linked <- nearest_NHDflowline(pts. = dams_CO %>% 
+                                     dplyr::mutate(info = paste(River)),
+                                   lines. = nhdflowline_sf,
+                                   tol = 1000)
+
+dams_linked_sf <- dams_linked[[1]]  %>% left_join(dams_CO,by = "IDS") %>% 
+    dplyr::select(-ends_with(".y")) %>% 
+    dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>% 
+    sf::st_as_sf()
+
+dams_linked_sf <- keep.unique.cols(dams_linked_sf)
+dams_coords <- do.call(rbind, st_geometry(dams_linked_sf)) %>% 
+  as_tibble() %>% setNames(c("lon","lat"))
+
+# Before visual checking 
+dams_CO_selected <- dams_linked_sf %>% dplyr::mutate( LONGITUDE =  unlist(dams_coords$lon), 
+                                               LATITUDE =  unlist(dams_coords$lat)) %>% 
+                   select(-contains("INSPECTION"),
+                          -contains("FED"), 
+                          -contains("STATE_REG"), 
+                          -contains("DATE"))
+# load the info on visual checks. This is carried out QGIS software 
+# 45 dams 
+dams_checked <- read.csv(file = paste0(data.sources,"/dams_vflag_adjusted.csv"), 
+                          stringsAsFactors = F)
+# This dataset is available as supporting information in Mukhopadhyay et. al (2020)
+# 14 dams adjusted manually 
+dams_adjusted <- dams_checked %>% dplyr::filter(hit %in% 0) %>% 
+                dplyr::select(NID_ID,NAME, ACTUAL.COMID) %>% 
+                dplyr::mutate(COMID = ACTUAL.COMID) %>% 
+                dplyr::left_join(nhdflowline_sf,by = "COMID") %>% 
+                select(NID_ID,NAME, COMID, LEVELPATHI)  
+
+
+nhdflowline_sf <- nhdflowline_sf %>% dplyr::rename_all(stringr::str_to_upper)
+# Just keep the neccessary columns 
+dams_sf <- dams_sf %>% select(IDS, contains("NID"), contains('NAM'),
+                              COMID, contains("LON"), contains("LAT"), 
+                              contains("FLAG"), 
+                              geometry ) %>% 
+                    mutate(NEAREST_LINE_ID = COMID) 
+# Update after visual check 
+rows_update <- dams_sf %>% mutate(NAME = str_c(NID_ID," ",DAM_NAM)) 
+ir <- which(rows_update$NAME %in% dams_adjusted$NAME)
+dams_sf$NEAREST_LINE_ID[ir] <- dams_sf$COMID[ir] <- dams_adjusted$COMID
+
+# stream gages 
+sites_sf <- read_sf(paste0(data.sources,"sites_selected_1km.shp")) 
+sites_coords <- do.call(rbind, st_geometry(sites_sf)) %>% 
+  as_tibble() %>% setNames(c("lon","lat"))  
+
+sites_sf <- sites_sf %>% dplyr::mutate( LONGITUDE =  unlist(sites_coords$lon), 
+                                        LATITUDE =  unlist(sites_coords$lat),
+                                        NEAREST_LINE_ID = COMID ) %>%   
+                                        drop_na() %>% sf::st_as_sf()
+```
+
+### Distance calculations : 
+Two kinds of distance calculations are carried out for each point (dam/ gage) - 
+
+1. Distance of points from "FromNode" of the NHDFlowline where it is located. 
+2. Distance from Headwaters of the network using "ArbolateSum" attribute of the NHDPlusv2 dataset. 
+```{r distance calculations, echo=TRUE, eval=FALSE }
+# # distance from end nodes (METERS)
+dist.nid <- distance_fromNodes(dams_sf,nhdflowline_sf) # distance of dams
+dist.sites <- distance_fromNodes(sites_sf,nhdflowline_sf) # distance of sites
+
+# # distance from head water (km) 
+dist_db_nid <- distance_FromHeadWater(dist_list = dist.nid,
+                                     db = nhdflowline_sf) 
+
+dist_db_sites <- distance_FromHeadWater(dist_list = dist.sites,
+                                        db = nhdflowline_sf)
+
+```
+## Input data frames for RICON network analysis : 
+
+The point data must have these attributes : (i) "IDS", (ii) "NAME", (iii) "LONGITUDE", (iv) "LATITUDE", (v)"NEAREST_LINE_ID", (vi) "COMID", (vii) "ARBOLATESU", (viii)      "SNAP_DIST", (ix) "DISTFROMNODE", (x) "DISTTONODE", (xi) "DIST_FROMHWKM", (xii)  "GEOMETRY", (xiii) "POINTTYPE". "IDS" are the unique identifier for each point and  should be of character class. "NAME" is the "STATION_NAME" and "DAM NAME" of respective selected points, though this can be updated by users to any character. "DISTFROMNODE" and "DISTTONODE"  are distances, in meters, from starting nodes and terminal nodes of each NHDFlowline onto which a point is snapped. "NEAREST_LINE_ID" is the "COMID" of the nearest NHDFlowline (same as "COMID"), *__always measured along the flowline__*. "SNAP_DIST" is the distance in meter, by which true location of the points needed to be adjusted to make them perfectly intersect the nearest nhdflowline. "ARBOLATESU" is another [NHDPlusV2](https://www.epa.gov/waterdata/get-nhdplus-national-hydrography-dataset-plus-data#v2datamap) attribute that is defined, for each NHDFlowline as the summation of its own length and lengths of every upstream features. "DIST_FROMHWKM" for a point is calculated based on its distance to the terminal nodes and ARBOLATESUM of the nearest nhdflowline. Geographical locations of each point is stored as LONGITUDE and LATITUDE (in degrees). The "GEOMETRY" column contains the planner coordinates (saved as characters) of each point that is used to for all distance calculations discussed before. For Colorado River Basin, UTM zone 12 is used when projecting the points to planner coordinates. 
+
+```{r final data, echo=TRUE, eval=FALSE}
+# combine all attributes  
+if (dim(dams_sf)[1] != length(unique(dams_sf$NID_ID))){
+  
+  dams <- dams_sf %>% sf::st_drop_geometry() %>% 
+    left_join(dist.nid, by = "IDS") %>% dplyr::select(-ends_with(".y")) %>% 
+    dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x")))  %>% 
+    left_join(dist_db_nid,by = "IDS") %>% dplyr::select(-ends_with(".y")) %>% 
+    dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>% 
+    dplyr::mutate(NAME = str_c(NID_ID," ",DAM_NAM),
+                  LONGITUDE = LONGITU,  # this happens when reading and writing shapefile
+                  LATITUDE = LATITUD,   # Comment out if neeeded 
+                  IDS = as.character(seq_len(dim(dams_sf)[1])), 
+                  POINTTYPE = "dam" , 
+                  IDS = str_c("Point.",IDS),
+                  GEOMETRY = str_c(GEOMETRY)) %>% 
+    select(IDS, NAME, LONGITUDE, LATITUDE,NEAREST_LINE_ID, COMID, ARBOLATESU, 
+            POINTTYPE, contains("DIST"),GEOMETRY) 
+    # 
+} else {
+  dams <- dams_sf %>% sf::st_drop_geometry() %>% 
+    left_join(dist.nid, by = "IDS") %>% dplyr::select(-ends_with(".y")) %>% 
+    dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x")))  %>% 
+    left_join(dist_db_nid,by = "IDS") %>% dplyr::select(-ends_with(".y")) %>% 
+    dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>% 
+    dplyr::mutate(NAME = str_c(NID_ID," ",DAM_NAM),
+                  LONGITUDE = LONGITU, 
+                  LATITUDE = LATITUD,
+                  IDS = str_c(NID_ID), 
+                  POINTTYPE = "dam" , 
+                  IDS = str_c("Point.",IDS),
+                  GEOMETRY = str_c(GEOMETRY)) %>% 
+    select(IDS, NAME, LONGITUDE, LATITUDE,NEAREST_LINE_ID, COMID, ARBOLATESU, 
+          POINTTYPE, contains("DIST"),GEOMETRY) 
+}
+
+ sites <- sites_sf %>% sf::st_drop_geometry() %>% 
+  left_join(dist.sites, by = "IDS") %>% dplyr::select(-ends_with(".y")) %>% 
+  dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x")))  %>% 
+  left_join(dist_db_sites,by = "IDS") %>% dplyr::select(-ends_with(".y")) %>% 
+  dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x"))) %>% 
+  dplyr::mutate(NAME = str_c(SITE_NO, " ",STATION),
+                POINTTYPE = "gage", 
+                IDS = str_c("Point.",IDS),
+                GEOMETRY = str_c(GEOMETRY)) %>% 
+  select(IDS, NAME, LONGITUDE, LATITUDE,NEAREST_LINE_ID, COMID, ARBOLATESU,POINTTYPE, 
+         contains("DIST"),GEOMETRY) 
+
+write.csv(dams, file = paste0(data.sources,"/nid_df.csv"), row.names = F)
+write.csv(sites, file = paste0(data.sources,"/sites_df.csv"), row.names = F)
+```
+For any question, please contact [Sudarshana Mukhopadhyay](https://sudarshanamukhopadhyay.com/). 
