@@ -7,7 +7,7 @@ River and Infrastructure Connectivity Network (RICON) – shows the dependency b
 
 Please see "vignettes/dataprep_CRB.Rmd" for input data preparation. The input data already is available as a part of RICON dataset for Colorado River Basin. 
 
-Using the following steps one can reproduce the River and Infrastructure Connectivity Network (RICON) dataset for Colorado River Basin :  
+Using the following steps one can reproduce the River and Infrastructure Connectivity Network (RICON) dataset for the Colorado River Basin :  
 
 
 ## Download RICON data : 
