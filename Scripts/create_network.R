@@ -132,7 +132,7 @@ dn_hw_nods <- hw_nodes %>%
   duplline <- table(sub_df$LEVELPATHI) 
   
   ########## Step 3 ###########################################
-  # # move along main stem 
+  print("moving along main stem" )
   
   # initial_list = list(dupl_line = duplline,
   #                     initial_df = sub_df, 
@@ -155,6 +155,8 @@ dn_hw_nods <- hw_nodes %>%
 
   ########## Step 4 check initial result ####################################
   # # other connections / divergence/ convergences / minor paths 
+  print("checking for complex connections ")
+  
   length(unique(L0$index_list)) # 
   # visited nodes 
   visited_index.list <- unique(L0$index_list)
@@ -171,6 +173,7 @@ dn_hw_nods <- hw_nodes %>%
 
   
   ######## Step 5 check for minor connections ##################################
+   print("check for minor connections")
   # points to start moving downstream at 
   sub_df <- points.df %>% filter(NODENAME %in% missed.nodes) %>% 
               group_by(LEVELPATHI) %>% arrange(DIST_FROMHWKM) 
