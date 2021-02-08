@@ -237,16 +237,16 @@ dn_hw_nods <- hw_nodes %>%
     Edge_List$EDGE_LENGTHKM[i] <- x$EDGELENGTH 
     NHDFlowlines_Visited[[i]] <- x$NHDflowlines_btw
     
-    print(i)
+  #  print(i)
     rm(x)
   }
   
   
   check_edge <- which(Edge_List$EDGE_LENGTHKM < 0)
   
-  
+  if(length(check_edge) > 0){Edge_List <- Edge_List[- check_edge,]}
   # Remove edge with <0 length ! these are few duplicate edges 
-  Edge_List <- Edge_List[- check_edge,] 
+  
   
   # add more attributes from points.df  
   # Pointtype 
