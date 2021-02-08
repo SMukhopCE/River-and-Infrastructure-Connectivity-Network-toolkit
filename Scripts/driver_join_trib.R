@@ -93,7 +93,7 @@ driver_join_trib <- function(initial_list , NHDdata, Flowline.df,points.df,tag =
         }
         tmp.df <- trib %>% group_by(LEVELPATHI) %>% top_n(1,DIST_FROMHWKM)    
       }
-      
+      print(paste("i = ",i))
     } # End of loop i 
   
   
@@ -135,7 +135,7 @@ driver_join_trib <- function(initial_list , NHDdata, Flowline.df,points.df,tag =
 #' @examples
 join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,tag){
   # moves downstream till a node is found 
-  
+  print(this.nhd$COMID)
   FROMNODE <- this.nhd$FROMNODE
   TONODE <- this.nhd$TONODE
   
@@ -161,12 +161,12 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
                         filter(ARBOLATESU > this.nhd$ARBOLATESU) 
       
       if(dim(lines.with.pts)[1] > 1){ 
-    #    print("picking current line ")
+        print("picking current line ")
         TONODEAtr <- TONODEAtr %>% 
           filter(FROMCOMID %in% this.nhd$COMID) %>% 
           select(everything()) 
       } else { 
-    #    print("picking minor flowpath ")
+        print("picking minor flowpath ")
         TONODEAtr <- TONODEAtr %>% 
           filter(FROMCOMID %in% lines.with.pts$COMID) %>% 
           select(everything()) 
@@ -178,19 +178,19 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
   if  (dim(TONODEAtr)[1]==0) {   
   #  print("stop if data not found")
     return(out)} else if(dim(TONODEAtr)[1] == 1 && TONODEAtr$DIRECTION == 713)  { # Stop if reached an isolated network or coastline 
-  #   print("Have reached network end")
+     print("Have reached network end")
     return(out) } else if (is.null(TONODEAtr$DIRECTION) | 
                            (TONODEAtr$DIRECTION == 714 & 
-                            TONODEAtr$TOCOMID == 0))   {   
+                            TONODEAtr$TOCOMID == 0))   {  # Fix here!  
   #  print("Have reached coastline ")
     return(out)
       }  else if (is.null(this.nhd$DNDRAINCOU)) {  
         # stop if DNDRAINCOUnt == 0 
-  #  print("reached end of this stream")
+    print("reached end of this stream")
     return(out) 
     }   else  { 
           # move downstream 
-  #    print("compare HydroSeq of TONODE")
+      print("compare HydroSeq of TONODE")
               if(TONODEAtr$FROMHYDSEQ > TONODEAtr$TOHYDSEQ) {
                 downstreamCOMID <- TONODEAtr$TOCOMID
               } else {
@@ -209,7 +209,7 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
               return(out) 
             } else 
             { # else move downstream 
-         #     print(".. recursion ..")
+              print(".. recursion ..")
               out <- join_tributary(downstream.Flowline,PlusFlow,PlusFlowlineVAA,flowlines.df,out,tag)  
               
             }

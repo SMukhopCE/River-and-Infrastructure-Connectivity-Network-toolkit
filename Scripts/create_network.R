@@ -93,7 +93,7 @@ create_network <- function(points, nodes = NULL, NHDdata, Flowline.df = NULL ){
    # }
    # print(tmp.index.list)
    } 
-rm(i,j,tmp,tmp.index.list)
+rm(i,tmp,tmp.index.list)
 
 
 
