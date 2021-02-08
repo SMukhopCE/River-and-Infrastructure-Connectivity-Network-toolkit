@@ -75,6 +75,11 @@ get_data <- function(dd = NULL,zone_num=NULL,out.dir = NULL,
     dd <- nhd_def$Drainage.Id
   }
   
+  if(is.null(dd) & !is.null(zone_num)){
+    tmpzones <- lapply(strsplit(unlist(nhd_def$VPUs),', '), function(x) gsub(" ","",x) )
+    dd <- nhd_def$Drainage.Id[which(!is.na(str_match(tmpzones, zone_num)))]
+  }
+  
   # Main url : FTP of horizon system 
   # May be user supplied latest FTP 
   if (is.null(mainurl)){
