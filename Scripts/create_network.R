@@ -134,16 +134,6 @@ dn_hw_nods <- hw_nodes %>%
   ########## Step 3 ###########################################
   print("moving along main stem" )
   
-  # initial_list = list(dupl_line = duplline,
-  #                     initial_df = sub_df, 
-  #                     initial_nodes = nodes,
-  #                     index_list = unique(visited_index.list)) 
-  # NHDdata = NHDdata
-  # Flowline.df = Flowline.df
-  # points.df = points.df
-  # tag = "major"
-  # 
-  
   L0 <- driver_join_trib(initial_list = list(dupl_line = duplline,
                               initial_df = sub_df, 
                               initial_nodes = nodes,
