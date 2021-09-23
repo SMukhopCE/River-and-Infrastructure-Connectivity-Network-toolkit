@@ -184,7 +184,7 @@ dn_hw_nods <- hw_nodes %>%
   
   # # move along MINOR stem 
  
-  L1 <- driver_join_trib(list(dupl_line = duplline,
+  L1 <- driver_join_trib(initial_list = list(dupl_line = duplline,
                               initial_df = sub_df, 
                               initial_nodes = L0$initial_nodes,
                               index_list = visited_index.list),

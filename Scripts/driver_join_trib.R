@@ -133,57 +133,52 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
   
   FROMNODEAtr <- PlusFlowlineVAA %>% filter(NODENUMBER %in% FROMNODE) %>% select(everything())
   TONODEAtr <- PlusFlowlineVAA %>% filter(NODENUMBER %in% TONODE) %>% select(everything())
- # print(TONODEAtr) 
+  
+  #print(TONODEAtr) 
   # check for junction nodes ---------------------------------------------------   
   if(dim(TONODEAtr)[1] > 1) { # junction : divergent/complex 
     if (tag == "major") {
       # Must move along main flowline 
       ro <-   which(TONODEAtr$FROMLVLPAT != TONODEAtr$TOLVLPAT) # only keeps main flow line
       TONODEAtr <- TONODEAtr[-ro,]
-    } else if (tag == "minor") {
-      # remove main stem only if current flowline is a minor flowpath 
-      # meanling moving from minor path to major 
-      if((dim(TONODEAtr)[1] > 1)) {
-        r1 <- which(this.nhd$LEVELPATHI == TONODEAtr$FROMLVLPAT) # is current path the main flowline? 
-        ro <- which(TONODEAtr$FROMLVLPAT == TONODEAtr$TOLVLPAT) #  main flow line
-        
-        print(paste0("r1 = ",r1))
-        print(paste0("ro = ",ro))
-          
-        if(length(r1)>0 & length(ro)> 0 & r1!=ro){
-            TONODEAtr <- TONODEAtr[-ro,]
-          }else{
-            TONODEAtr <- TONODEAtr
-          }
-        }
-        
-      downstr.levelpathIds <- TONODEAtr$TOLVLPAT 
-     
+    } else if (tag == "minor") { 
+      # check if there is any node immediately downstream  
+      downstr.levelpathIds <- unique(TONODEAtr$TOLVLPAT) 
+      
       lines.with.pts <- flowlines.df %>% filter(LEVELPATHI %in% downstr.levelpathIds) %>% 
-                        filter( ! is.na(POINTTYPE )) %>% 
-                        filter(ARBOLATESU > this.nhd$ARBOLATESU) 
+                        filter(!is.na(POINTTYPE)) %>% 
+                        filter(ARBOLATESU > this.nhd$ARBOLATESU) # 
       
-      
-      
-      if(dim(lines.with.pts)[1] > 1){ 
+      if(isTRUE(any(lines.with.pts$COMID != TONODEAtr$TOCOMID)) ){ 
        # print("picking current line ") 
-        
-         # print(TONODEAtr) 
-         # print(downstr.levelpathIds)
-         # 
         TONODEAtr <- TONODEAtr %>% 
           filter(FROMCOMID %in% this.nhd$COMID) %>% 
           select(everything()) 
       } else { 
-      #  print("picking minor flowpath ")
-        # print(TONODEAtr) 
-        # print(downstr.levelpathIds)
-        # 
+        print("picking minor flowpath ")
         TONODEAtr <- TONODEAtr %>% 
-          filter(FROMCOMID %in% lines.with.pts$COMID) %>% 
+          filter(FROMLVLPAT %in% lines.with.pts$LEVELPATHI) %>% 
           select(everything()) 
-       
       } 
+      # check for divergences now 
+      # remove main stem only if current flowline is a minor flowpath 
+      # i.e. moving from minor path to major 
+      
+      if((dim(TONODEAtr)[1] > 1)) {
+        print("Comlpex junction node ")
+        #r1 <- which(this.nhd$LEVELPATHI == TONODEAtr$FROMLVLPAT) # is current path the main flowline?
+        #ro <- which(TONODEAtr$FROMLVLPAT == TONODEAtr$TOLVLPAT) #  main flow line
+        r3 <- which.min(TONODEAtr$DELTALEVEL)
+        # if(!is.null(r1) &&  length(r1)>0 && !is.null(ro) && length(ro)> 0 && (r1!=ro)){
+        #   TONODEAtr <- TONODEAtr[-ro,]
+        # 
+        # }else if (!is.null(r1) &&  length(r1)>0 && !is.null(ro) && length(ro)> 0 && (r1==ro)) {
+        #   TONODEAtr <- TONODEAtr
+        # } 
+        TONODEAtr <- TONODEAtr[r3,]
+      }
+      
+      
     }
       
   }
@@ -209,7 +204,7 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
               } else {
                 downstreamCOMID <- TONODEAtr$FROMCOMID
               }
-    
+  #  print("Line 203")
     downstream.Flowline <- PlusFlow %>% 
       filter(COMID %in% downstreamCOMID) %>% 
       select(everything())
@@ -223,7 +218,7 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
               return(out) 
             } else 
             { # else move downstream 
-#              print(".. recursion ..")
+              print(".. recursion ..")
               out <- join_tributary(downstream.Flowline,PlusFlow,PlusFlowlineVAA,flowlines.df,out,tag)  
               
             }
