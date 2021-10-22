@@ -180,7 +180,7 @@ create_edges <- function(df, nodeinfo,NHDdata,
 #' @export
 #'
 #' @examples
-find_distance <- function(edges, point1, point2, direction){ 
+find_distance <- function(edges, point1, point2, direction="downstream"){ 
   # Check if points belong to the edge list 
   
   

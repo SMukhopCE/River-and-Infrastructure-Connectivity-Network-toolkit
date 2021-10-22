@@ -142,7 +142,7 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
       ro <-   which(TONODEAtr$FROMLVLPAT != TONODEAtr$TOLVLPAT) # only keeps main flow line
       TONODEAtr <- TONODEAtr[-ro,]
     } else if (tag == "minor") { 
-      # check if there is any node immediately downstream  
+      # check if there is any node immediately downstream w/ same levelPathID
       downstr.levelpathIds <- unique(TONODEAtr$TOLVLPAT) 
       
       lines.with.pts <- flowlines.df %>% filter(LEVELPATHI %in% downstr.levelpathIds) %>% 
@@ -150,16 +150,17 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
                         filter(ARBOLATESU > this.nhd$ARBOLATESU) # 
       
       if(isTRUE(any(lines.with.pts$COMID != TONODEAtr$TOCOMID)) ){ 
-       # print("picking current line ") 
+        print("picking current line ") 
         TONODEAtr <- TONODEAtr %>% 
           filter(FROMCOMID %in% this.nhd$COMID) %>% 
           select(everything()) 
-      } else { 
-        print("picking minor flowpath ")
-        TONODEAtr <- TONODEAtr %>% 
-          filter(FROMLVLPAT %in% lines.with.pts$LEVELPATHI) %>% 
-          select(everything()) 
       } 
+       else { 
+         print("picking minor flowpath ")
+      #   TONODEAtr <- TONODEAtr %>% 
+      #     filter(FROMLVLPAT %in% lines.with.pts$LEVELPATHI) %>% 
+      #     select(everything()) 
+       } 
       # check for divergences now 
       # remove main stem only if current flowline is a minor flowpath 
       # i.e. moving from minor path to major 
@@ -213,7 +214,8 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
     }  # 
     #If flowline with a node is found, STOP 
   if ((dim(out)[1] > 0 ) & !all(is.na(out$POINTTYPE))){
-           # if ((dim(out)[1] > 0 ) & (tag == "major") & !all(is.na(out$POINTTYPE)) ){
+               # if ((dim(out)[1] > 0 ) & (tag == "major") & !all(is.na(out$POINTTYPE)) ){
+    
     print(paste0("stopping at ",out$COMID))
               return(out) 
             } else 
