@@ -13,7 +13,7 @@
 driver_join_trib <- function(initial_list , NHDdata, Flowline.df,points.df,tag = "major")
 {
   # calls join_tributary
-  # by default moves along mainsteam
+  # by default moves along main path
   # change tag for checking minor connections 
   # returns updated "nodes", nextdf 
   
@@ -62,9 +62,10 @@ driver_join_trib <- function(initial_list , NHDdata, Flowline.df,points.df,tag =
           select(everything()) 
         }
       
-      
+      ##### Main function that calls recursive function # 
       if (tmp.nhd$DNDRAINCOU > 0) # call join_tributary 
       { 
+        print(paste0("starting from ",tmp.nhd$COMID))
         trib.df <- join_tributary(this.nhd = tmp.nhd, 
                                   PlusFlow = NHDdata$flowlines,
                                   PlusFlowlineVAA = NHDdata$flownodes,
@@ -75,7 +76,7 @@ driver_join_trib <- function(initial_list , NHDdata, Flowline.df,points.df,tag =
       if (isTRUE(exists("trib.df"))) {
         
         # Update if tributaries exist 
-        trib <- points.df %>% filter(NEAREST_LINE_ID %in% trib.df$COMID)
+        trib <- points.df %>% filter(NEAREST_LINE_ID %in% trib.df$COMID) %>% arrange(DIST_FROMHWKM) 
         trib.index.list <- match(trib$NODENAME, node_names) 
         new.index.list <- c(new.index.list,trib.index.list)
         if(length(trib.index.list) > 1 )
@@ -83,17 +84,17 @@ driver_join_trib <- function(initial_list , NHDdata, Flowline.df,points.df,tag =
           trib.index.list <- c(ds.index.list,trib.index.list)
           for (k in 2:length(trib.index.list))
           {
-           # cat("From Node :",trib.index.list[k-1],"To Node :",trib.index.list[k],'\n')
+            cat("From Node :",trib.index.list[k-1],"To Node :",trib.index.list[k],'\n')
             initial_nodes[trib.index.list[k], trib.index.list[(k-1)]] <- 1 
           }
           
         } else {
-         # cat("From Node :",ds.index.list,"To Node :",trib.index.list,'\n')
+          cat("From Node :",ds.index.list,"To Node :",trib.index.list,'\n')
           initial_nodes[trib.index.list,ds.index.list] <- 1 
         }
         tmp.df <- trib %>% group_by(LEVELPATHI) %>% top_n(1,DIST_FROMHWKM)    
       }
-     print(paste("Completed i = ",i))
+ #    print(paste("Completed i = ",i))
     } # End of loop i 
   
   
@@ -112,7 +113,7 @@ driver_join_trib <- function(initial_list , NHDdata, Flowline.df,points.df,tag =
 
 
 
-#' Title
+#' join_tributary
 #'
 #' @param this.nhd 
 #' @param PlusFlow 
@@ -127,14 +128,14 @@ driver_join_trib <- function(initial_list , NHDdata, Flowline.df,points.df,tag =
 #' @examples
 join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,tag){
   # moves downstream till a node is found 
-  print(this.nhd$COMID)
+
   FROMNODE <- this.nhd$FROMNODE
   TONODE <- this.nhd$TONODE
   
   FROMNODEAtr <- PlusFlowlineVAA %>% filter(NODENUMBER %in% FROMNODE) %>% select(everything())
   TONODEAtr <- PlusFlowlineVAA %>% filter(NODENUMBER %in% TONODE) %>% select(everything())
   
-  #print(TONODEAtr) 
+  
   # check for junction nodes ---------------------------------------------------   
   if(dim(TONODEAtr)[1] > 1) { # junction : divergent/complex 
     if (tag == "major") {
@@ -150,13 +151,14 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
                         filter(ARBOLATESU > this.nhd$ARBOLATESU) # 
       
       if(isTRUE(any(lines.with.pts$COMID != TONODEAtr$TOCOMID)) ){ 
-        print("picking current line ") 
+
         TONODEAtr <- TONODEAtr %>% 
           filter(FROMCOMID %in% this.nhd$COMID) %>% 
           select(everything()) 
       } 
        else { 
-         print("picking minor flowpath ")
+         # Can comment out this 'else' part: for checking only 
+      #    print("picking minor flowpath ")
       #   TONODEAtr <- TONODEAtr %>% 
       #     filter(FROMLVLPAT %in% lines.with.pts$LEVELPATHI) %>% 
       #     select(everything()) 
@@ -166,67 +168,52 @@ join_tributary <- function(this.nhd,PlusFlow,PlusFlowlineVAA,flowlines.df,out,ta
       # i.e. moving from minor path to major 
       
       if((dim(TONODEAtr)[1] > 1)) {
-        print("Comlpex junction node ")
-        #r1 <- which(this.nhd$LEVELPATHI == TONODEAtr$FROMLVLPAT) # is current path the main flowline?
-        #ro <- which(TONODEAtr$FROMLVLPAT == TONODEAtr$TOLVLPAT) #  main flow line
-        r3 <- which.min(TONODEAtr$DELTALEVEL)
-        # if(!is.null(r1) &&  length(r1)>0 && !is.null(ro) && length(ro)> 0 && (r1!=ro)){
-        #   TONODEAtr <- TONODEAtr[-ro,]
-        # 
-        # }else if (!is.null(r1) &&  length(r1)>0 && !is.null(ro) && length(ro)> 0 && (r1==ro)) {
-        #   TONODEAtr <- TONODEAtr
-        # } 
-        TONODEAtr <- TONODEAtr[r3,]
+   #  # # Comlpex junction node 
+        r0 <- which.min(TONODEAtr$DELTALEVEL)
+        TONODEAtr <- TONODEAtr[r0,]
       }
-      
       
     }
       
   }
-  #-----------------------------------------------------------------------------
+  #-------------Stopping Criteria --------------------------------------------
   if  (dim(TONODEAtr)[1]==0) {   
-    print("stop if data not found")
-    return(out)} else if(dim(TONODEAtr)[1] == 1 && TONODEAtr$DIRECTION == 713)  { # Stop if reached an isolated network or coastline 
-     print("Have reached network end")
+    print("stopping at end of data")
+    return(out)} else if(dim(TONODEAtr)[1] == 1 && TONODEAtr$DIRECTION == 713)  { 
+      # Stop if reached an isolated network or coastline 
+     print("stopping at network end")
     return(out) } else if (is.null(TONODEAtr$DIRECTION) | 
-                           (TONODEAtr$DIRECTION == 714 | #& 
-                            TONODEAtr$TOCOMID == 0))   {  # Fix here!  
-    print("Have reached coastline ")
+                           (TONODEAtr$DIRECTION == 714 | 
+                            TONODEAtr$TOCOMID == 0))   {  
+    print("stopping at coastline ")
     return(out)
       }  else if (is.null(this.nhd$DNDRAINCOU)) {  
         # stop if DNDRAINCOUnt == 0 
-    print("reached end of this stream")
+    print("stopping at end of this stream")
     return(out) 
     }   else  { 
-          # move downstream 
-    #  print("compare HydroSeq of TONODE")
+ # move downstream 
+    # # # compare HydroSeq of TONODE")
               if(TONODEAtr$FROMHYDSEQ > TONODEAtr$TOHYDSEQ) {
                 downstreamCOMID <- TONODEAtr$TOCOMID
               } else {
                 downstreamCOMID <- TONODEAtr$FROMCOMID
               }
-  #  print("Line 203")
+ 
     downstream.Flowline <- PlusFlow %>% 
       filter(COMID %in% downstreamCOMID) %>% 
       select(everything())
     
     out <- flowlines.df %>% filter(COMID %in% downstreamCOMID) 
     }  # 
-    #If flowline with a node is found, STOP 
+    #If flowline with a node is found, STOP at this nhdflowline 
   if ((dim(out)[1] > 0 ) & !all(is.na(out$POINTTYPE))){
-               # if ((dim(out)[1] > 0 ) & (tag == "major") & !all(is.na(out$POINTTYPE)) ){
-    
-    print(paste0("stopping at ",out$COMID))
+        print(paste0("stopping at ",out$COMID))
               return(out) 
             } else 
-            { # else move downstream 
-              print(".. recursion ..")
+            { # else move downstream  # # # ... recursion ...
               out <- join_tributary(downstream.Flowline,PlusFlow,PlusFlowlineVAA,flowlines.df,out,tag)  
-              
             }
     
-   
-  
-  
   return(out)
 }

@@ -59,7 +59,7 @@ readNHDdata <- function(filepath){
 #' 
 #' @noRd
 #'
-
+# Use this for horizon systems ftp 
 get_data <- function(dd = NULL,zone_num=NULL,out.dir = NULL, 
                      nn = 1,mainurl = NULL, 
                      download.all = FALSE){
@@ -167,6 +167,72 @@ get_data <- function(dd = NULL,zone_num=NULL,out.dir = NULL,
   return(dataset)
   
 }
+
+# this only extracts local 7z files into respective folders 
+# Handles LOCALLY available 7z file ONLY 
+get_data2 <- function(dd = NULL,zone_num=NULL,out.dir = NULL, 
+                     nn = 1,folderpath=NULL){
+  
+  load("scripts/nhd_def.RDA")
+  
+  if(is.null(out.dir)){
+    out.dir <- getwd()
+  }
+  
+  if(is.null(dd) & is.null(zone_num)){
+    # Look for ALL drainage ids 
+    dd <- nhd_def$Drainage.Id
+  }
+  
+  if(is.null(dd) & !is.null(zone_num)){
+    tmpzones <- lapply(strsplit(unlist(nhd_def$VPUs),', '), function(x) gsub(" ","",x) )
+    dd <- nhd_def$Drainage.Id[which(!is.na(str_match(tmpzones, zone_num)))]
+  }
+  
+  # get VPUid 
+  if(is.null(zone_num)){
+    # extract zone names 
+    thiszone <- nhd_def$VPUs[match(dd,nhd_def$Drainage.Id)] # VPUids   
+    thiszone <- unlist(strsplit(thiszone,', ')) 
+  } else {
+    thiszone <- zone_num # Class : Character. It can be a vector or scalar 
+  }
+  
+ 
+  dataset <- list() 
+  if(is.null(folderpath)){stop('Must supply a local data path where NHD 7z files are located.')}
+  
+  for( i in 1:length(folderpath)){
+    
+    # tryCatch(curlPerform(url = folderpath[i]),
+    #          COULDNT_RESOLVE_HOST=function(x) cat("resolve problem\n"),
+    #          error = function(x) cat(class(x), "got in\n"))
+    
+    filenames <- list.files(folderpath[i],full.names = T)
+    filenames <- filenames[c(grep("NHDSnapshot_",filenames),
+                               grep("NHDPlusAttributes_",filenames),
+                               grep("WBDSnapshot_",filenames))]
+    print(filenames)
+
+   # dir.create(paste0(out.dir,'NHDPlus',zone_num))
+    
+    for(filenumber in 1:length(filenames)) {
+    
+      archive_extract(archive=filenames[filenumber],out.dir)  
+      
+    }
+    
+    dataset[[i]] <-  paste0(out.dir, str_remove(folderpath[i],mainurl)) 
+    
+  }
+  
+  names(dataset) <- make_listNames(folderpath)
+  
+  return(dataset)
+  
+}
+
+
 
 make_listNames <- function(x){
   index <- tail(str_locate_all(x,"/")[[1]][,1],2) 

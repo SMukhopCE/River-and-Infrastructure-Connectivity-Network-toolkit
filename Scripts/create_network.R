@@ -61,7 +61,8 @@ create_network <- function(points, nodes = NULL, NHDdata, Flowline.df = NULL ){
   points.df <- points.df  %>% dplyr::left_join(tmp,by='COMID')  %>% dplyr::select(-ends_with(".y")) %>% 
     dplyr::rename_at(vars(ends_with(".x")),funs(str_remove(.,".x")))
   
-  
+ ##### start network analysis##############################################
+   sink('logfile.txt')
   ###########################  step 1 ##########################################
   # #  headwater lines with nodes
   hwlines_with_nodes <- Flowline.df %>%  
@@ -132,7 +133,7 @@ dn_hw_nods <- hw_nodes %>%
   duplline <- table(sub_df$LEVELPATHI) 
   
   ########## Step 3 ###########################################
-  print("moving along main stem" )
+ # print("moving along main stem" )
   
   L0 <- driver_join_trib(initial_list = list(dupl_line = duplline,
                               initial_df = sub_df, 
@@ -145,9 +146,9 @@ dn_hw_nods <- hw_nodes %>%
 
   ########## Step 4 check initial result ####################################
   # # other connections / divergence/ convergences / minor paths 
-  print("checking for complex connections ")
+ # print("checking for complex connections ")
   
-  length(unique(L0$index_list)) # 
+ # length(unique(L0$index_list)) # 
   # visited nodes 
   visited_index.list <- unique(L0$index_list)
   visited.nodes <- node_names[visited_index.list]
@@ -163,7 +164,7 @@ dn_hw_nods <- hw_nodes %>%
 
   
   ######## Step 5 check for minor connections ##################################
-   print("check for minor connections")
+ #  print("check for minor connections")
   # points to start moving downstream at 
   sub_df <- points.df %>% filter(NODENAME %in% missed.nodes) %>% 
               group_by(LEVELPATHI) %>% arrange(DIST_FROMHWKM) 
@@ -202,13 +203,16 @@ dn_hw_nods <- hw_nodes %>%
   nodes <- L1$initial_nodes
   
   nodes[is.na(nodes)] <- 0
-  
+ 
+ 
+####### completed network creation ############################
+  sink()
+
+###### Create edge list ###############################################
   print("Creating edge list ...")
   
   check <- melt(nodes,id.vars = 1:ncol(nodes)) 
   check <- check %>% dplyr::filter(value != 0) # 
-  
-  
   
   Edge_List <- data.frame(FROM_NODE = check[,2], 
                           TO_NODE = check[,1]) #, 
@@ -216,9 +220,6 @@ dn_hw_nods <- hw_nodes %>%
   
   Edge_List <- Edge_List %>% dplyr::mutate(EDGE_LENGTHKM = NA) 
   NHDFlowlines_Visited <- list()
-  
-
-  
   
   for(i in 1 : dim(Edge_List)[1]){
     
@@ -273,15 +274,40 @@ dn_hw_nods <- hw_nodes %>%
   tmp2 <- match(Edge_List$TO_NODE,points.df$NODENAME)
   Edge_List$TO_NODE_NAME <- points.df$NAME[tmp2]
   
+  # add network end points at the end 
+  logfile <- read.delim('logfile.txt',header = F)
+  logfile1 <-  as.list(t(logfile))  
   
+  tmp1 <- unlist(lapply(logfile1,function(s){grep("To Node :  ",s,value=T)}))
+  end.node.ids <- gsub("From Node : |To Node :  ","",tmp1)
+  end.node.ids <- unique(as.numeric(end.node.ids))
+  end.node.ids <- end.node.ids[!is.na(end.node.ids)]
+  
+  end.points <- points.df[end.node.ids,]
+  
+ com <- which(end.points$IDS %in% Edge_List$FROM_NODE) ; # this can happen because some nodes are visited for minor connection and major connection
+ end.points <- end.points[-com,]
+ 
+ check1 <- length(as.character(unique(c(Edge_List$FROM_NODE))))
+ check2 <- length(unique(c(end.points$IDS)))
+ 
+NN <- length(unique(c(as.character(Edge_List$TO_NODE), 
+                 end.points$IDS, 
+                 as.character(Edge_List$FROM_NODE))))
+ 
+status = ifelse(NN == dim(points.df)[1], 'TRUE','Check logfile') 
   
   # RETURN 
   return(list(edge_list = Edge_List, 
               connectivity = nodes,
               combined_Points = points.df,
               joined_flowline = Flowline.df, 
-              visited_flowline = NHDFlowlines_Visited, # for each edge 
+              terminal_nodes = end.points, 
+              status = status,
+              visited_flowline = NHDFlowlines_Visited, # for each edge (could be HUGE) 
               visited_index.list = visited_index.list, 
               visited.nodes = visited.nodes, 
-              missed.nodes = missed.nodes))
+              missed.nodes = missed.nodes,
+              check_edge = check_edge,
+              logfile = logfile1))
 }
