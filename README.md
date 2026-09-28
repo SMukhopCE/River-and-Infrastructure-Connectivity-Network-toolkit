@@ -151,4 +151,32 @@ sum(unlist(dist_hoover_glencanyon))
 #> [1] 592.9389
 ```
 
+## Export RICON to GIS formats (Python)
+
+Two Python scripts in `Scripts/` turn the RICON CSVs into layers that QGIS, ArcGIS or any GIS tool can open.
+
+**1. One GeoPackage with nodes, edges and NHD flowlines (pure Python).** `ricon_to_geopackage.py` uses `gpkg_writer.py` and `shp_reader.py` from the same folder. It needs only the Python standard library and pandas (no GDAL, fiona or geopandas). The flowline shapefile is read as a stream, so large files don't have to fit in memory.
+
+```bash
+pip install pandas
+cd Scripts
+python ricon_to_geopackage.py \
+    --nid nid_df.csv --sites sites_df.csv --edges Edge_List.csv \
+    --flowlines linked_nhdflowlines.shp \
+    --out ricon_crb.gpkg
+```
+
+The output has three layers: `ricon_nodes` (dams and gauges), `ricon_edges` (straight lines between connected nodes) and `nhd_flowlines` (the NHDPlusV2 channels, from the shapefile passed to `--flowlines`). GeoPackage keeps full attribute names, unlike shapefiles, which cut them to 10 characters.
+
+**2. Shapefiles or GeoPackage for nodes and edges only (geopandas).** `ricon_to_geospatial.py` writes `ricon_nodes` and `ricon_edges`, and can check a path length against the 2020 paper (Glen Canyon to Hoover, 592.9 km):
+
+```bash
+pip install geopandas shapely pandas
+python ricon_to_geospatial.py \
+    --nid nid_df.csv --sites sites_df.csv --edges Edge_List.csv \
+    --outdir ./ricon_gis
+```
+
+In both outputs, edges are drawn as straight lines between the two nodes; edge lengths are the river distances from `Edge_List.csv`.
+
 For any question, readers are encouraged to contact [Sudarshana Mukhopadhyay](https://sudarshanamukhopadhyay.com/). 
