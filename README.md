@@ -155,7 +155,7 @@ sum(unlist(dist_hoover_glencanyon))
 
 Two Python scripts in `Scripts/` turn the RICON CSVs into layers that QGIS, ArcGIS or any GIS tool can open.
 
-**1. One GeoPackage with nodes, edges and NHD flowlines (pure Python).** `ricon_to_geopackage.py` uses `gpkg_writer.py` and `shp_reader.py` from the same folder. It needs only the Python standard library and pandas (no GDAL, fiona or geopandas). The flowline shapefile is read as a stream, so large files don't have to fit in memory.
+**1. One GeoPackage with nodes, edges and NHD flowlines (pure Python).** `ricon_to_geopackage.py` uses `gpkg_writer.py` and `shp_reader.py` from the same folder. 
 
 ```bash
 pip install pandas
@@ -168,7 +168,7 @@ python ricon_to_geopackage.py \
 
 The output has three layers: `ricon_nodes` (dams and gauges), `ricon_edges` (straight lines between connected nodes) and `nhd_flowlines` (the NHDPlusV2 channels, from the shapefile passed to `--flowlines`). GeoPackage keeps full attribute names, unlike shapefiles, which cut them to 10 characters.
 
-**2. Shapefiles or GeoPackage for nodes and edges only (geopandas).** `ricon_to_geospatial.py` writes `ricon_nodes` and `ricon_edges`, and can check a path length against the 2020 paper (Glen Canyon to Hoover, 592.9 km):
+**2. Shapefiles or GeoPackage for nodes and edges only (geopandas).** `ricon_to_geospatial.py` writes `ricon_nodes` and `ricon_edges`, and can check a path length against the 2020 paper (e.g., Glen Canyon to Hoover, 592.9 km):
 
 ```bash
 pip install geopandas shapely pandas
